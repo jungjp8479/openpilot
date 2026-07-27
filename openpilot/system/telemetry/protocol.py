@@ -2,6 +2,7 @@
 from typing import Any
 
 MSG_TELEMETRY = "telemetry"
+MSG_STATUS = "status"
 MSG_COMMAND = "command"
 MSG_ACK = "ack"
 MSG_ERROR = "error"
@@ -13,6 +14,10 @@ ERR_INVALID = "INVALID"
 
 def telemetry_message(data: dict[str, Any]) -> dict[str, Any]:
   return {"type": MSG_TELEMETRY, "data": data}
+
+
+def status_message(streaming: bool, offroad: bool) -> dict[str, Any]:
+  return {"type": MSG_STATUS, "data": {"streaming": streaming, "offroad": offroad}}
 
 
 def ack_message(cmd_id: str, ok: bool = True) -> dict[str, Any]:

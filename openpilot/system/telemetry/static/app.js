@@ -3,6 +3,7 @@
 
   const els = {
     status: document.getElementById("status"),
+    banner: document.getElementById("banner"),
     speed: document.getElementById("speed"),
     targetSpeed: document.getElementById("target-speed"),
     opBadge: document.getElementById("op-badge"),
@@ -22,7 +23,7 @@
 
   let map = null;
   let marker = null;
-  let eventSource = null;
+  let ws = null;
   let reconnectTimer = null;
 
   function initMap() {
@@ -39,13 +40,45 @@
     }).addTo(map);
   }
 
-  function setConnected(connected) {
-    els.status.textContent = connected ? "Live" : "Disconnected";
-    els.status.className = "status " + (connected ? "connected" : "disconnected");
+  function setStatus(mode) {
+    if (mode === "live") {
+      els.status.textContent = "Live";
+      els.status.className = "status connected";
+      els.banner.className = "banner hidden";
+    } else if (mode === "waiting") {
+      els.status.textContent = "Connected";
+      els.status.className = "status waiting";
+      els.banner.textContent = "Waiting for ignition — live data will start when the car is onroad";
+      els.banner.className = "banner waiting";
+    } else {
+      els.status.textContent = "Disconnected";
+      els.status.className = "status disconnected";
+      els.banner.className = "banner hidden";
+    }
   }
 
   function setPill(el, active) {
     el.classList.toggle("active", !!active);
+  }
+
+  function clearUI() {
+    els.speed.textContent = "--";
+    els.targetSpeed.textContent = "--";
+    els.opBadge.textContent = "OFF";
+    els.opBadge.className = "badge off";
+    setPill(els.gas, false);
+    setPill(els.brake, false);
+    setPill(els.steerOverride, false);
+    setPill(els.leftBlinker, false);
+    setPill(els.rightBlinker, false);
+    els.steerAngle.textContent = "0°";
+    els.steerBar.style.left = "50%";
+    els.gpsFix.textContent = "No fix";
+    els.gpsFix.className = "gps-fix no-fix";
+    els.lat.textContent = "--";
+    els.lon.textContent = "--";
+    els.accuracy.textContent = "--";
+    els.sats.textContent = "--";
   }
 
   function updateUI(data) {
@@ -89,44 +122,59 @@
     }
   }
 
-  function eventsUrl() {
+  function handleMessage(msg) {
+    if (msg.type === "telemetry" && msg.data) {
+      setStatus("live");
+      updateUI(msg.data);
+    } else if (msg.type === "status" && msg.data) {
+      if (msg.data.streaming) {
+        setStatus("live");
+      } else {
+        setStatus("waiting");
+        clearUI();
+      }
+    }
+  }
+
+  function wsUrl() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const params = new URLSearchParams(location.search);
     const token = params.get("token");
-    let url = "/api/events";
+    let url = proto + "//" + location.host + "/ws";
     if (token) url += "?token=" + encodeURIComponent(token);
     return url;
   }
 
   function connect() {
-    if (eventSource) {
-      eventSource.close();
+    if (ws) {
+      ws.onclose = null;
+      ws.close();
     }
 
-    eventSource = new EventSource(eventsUrl());
+    ws = new WebSocket(wsUrl());
 
-    eventSource.onopen = function () {
-      setConnected(true);
+    ws.onopen = function () {
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
     };
 
-    eventSource.onmessage = function (event) {
+    ws.onmessage = function (event) {
       try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "telemetry" && msg.data) {
-          updateUI(msg.data);
-        }
+        handleMessage(JSON.parse(event.data));
       } catch (e) {
         console.warn("bad message", e);
       }
     };
 
-    eventSource.onerror = function () {
-      setConnected(false);
-      eventSource.close();
+    ws.onclose = function () {
+      setStatus("disconnected");
       reconnectTimer = setTimeout(connect, 2000);
+    };
+
+    ws.onerror = function () {
+      ws.close();
     };
   }
 

@@ -125,7 +125,7 @@ procs = [
   NativeProcess("bridge", "openpilot/cereal/messaging", ["./bridge"], notcar),
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(and_(livestream, not_(iscar)), notcar)),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
-  PythonProcess("telemetryd", "openpilot.system.telemetry.telemetryd", and_(only_onroad, telemetry_enabled)),
+  PythonProcess("telemetryd", "openpilot.system.telemetry.telemetryd", telemetry_enabled),
 ]
 
 managed_processes = {p.name: p for p in procs}

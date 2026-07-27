@@ -1,172 +1,148 @@
 #!/usr/bin/env python3
 import argparse
+import asyncio
 import json
 import logging
 import mimetypes
 import signal
-import threading
-import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+import websockets
+from websockets.asyncio.server import serve
+from websockets.http11 import Response
 
 from openpilot.common.params import Params
 from openpilot.system.telemetry.aggregator import TelemetryAggregator
 from openpilot.system.telemetry.commands import handle_command
-from openpilot.system.telemetry.protocol import error_message, telemetry_message
+from openpilot.system.telemetry.protocol import error_message, status_message, telemetry_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 BROADCAST_HZ = 10.0
 DEFAULT_PORT = 8080
 
 
-class TelemetryState:
-  def __init__(self) -> None:
+class TelemetryServer:
+  def __init__(self, host: str, port: int) -> None:
+    self.host = host
+    self.port = port
     self.params = Params()
     self.aggregator = TelemetryAggregator()
-    self.lock = threading.Lock()
-    self.snapshot = self.aggregator.snapshot()
-    self.sse_clients: list[threading.Event] = []
+    self.clients: set[websockets.ServerConnection] = set()
+    self.lock = asyncio.Lock()
+    self.last_message: dict = status_message(streaming=False, offroad=True)
+    self.logger = logging.getLogger("telemetryd")
 
-  def update_snapshot(self) -> dict:
-    with self.lock:
-      self.snapshot = self.aggregator.update()
-      for event in self.sse_clients:
-        event.set()
-      return self.snapshot
-
-  def register_sse(self) -> tuple[threading.Event, dict]:
-    event = threading.Event()
-    with self.lock:
-      self.sse_clients.append(event)
-      snapshot = self.snapshot
-    return event, snapshot
-
-  def unregister_sse(self, event: threading.Event) -> None:
-    with self.lock:
-      if event in self.sse_clients:
-        self.sse_clients.remove(event)
-
-  def expected_token(self) -> str | None:
+  def _expected_token(self) -> str | None:
     token = self.params.get("TelemetryToken")
     return token if token else None
 
-  def check_token(self, path: str) -> bool:
-    expected = self.expected_token()
+  def _check_token(self, path: str) -> bool:
+    expected = self._expected_token()
     if expected is None:
       return True
     query = parse_qs(urlparse(path).query)
     return query.get("token", [None])[0] == expected
 
-
-class TelemetryHandler(BaseHTTPRequestHandler):
-  state: TelemetryState
-
-  def log_message(self, format: str, *args: object) -> None:  # noqa: A002
-    pass
-
-  def _send_json(self, status: int, payload: dict) -> None:
-    body = json.dumps(payload).encode()
-    self.send_response(status)
-    self.send_header("Content-Type", "application/json")
-    self.send_header("Content-Length", str(len(body)))
-    self.end_headers()
-    self.wfile.write(body)
-
-  def _send_bytes(self, status: int, body: bytes, content_type: str) -> None:
-    self.send_response(status)
-    self.send_header("Content-Type", content_type)
-    self.send_header("Content-Length", str(len(body)))
-    self.end_headers()
-    self.wfile.write(body)
-
   def _static_path(self, route: str) -> Path | None:
     if route == "/":
-      route = "/index.html"
-    file_path = (STATIC_DIR / route.lstrip("/")).resolve()
+      route = "index.html"
+    elif route.startswith("/static/"):
+      route = route[len("/static/"):]
+    else:
+      route = route.lstrip("/")
+    file_path = (STATIC_DIR / route).resolve()
     static_root = STATIC_DIR.resolve()
     if not str(file_path).startswith(str(static_root)):
       return None
     return file_path if file_path.is_file() else None
 
-  def do_GET(self) -> None:
-    route = urlparse(self.path).path
+  async def broadcast(self, message: dict) -> None:
+    payload = json.dumps(message)
+    async with self.lock:
+      self.last_message = message
+      dead: list[websockets.ServerConnection] = []
+      for client in self.clients:
+        try:
+          await client.send(payload)
+        except websockets.ConnectionClosed:
+          dead.append(client)
+      for client in dead:
+        self.clients.discard(client)
 
-    if not self.state.check_token(self.path):
-      self._send_bytes(401, b"Unauthorized\n", "text/plain")
-      return
+  async def broadcaster(self) -> None:
+    interval = 1.0 / BROADCAST_HZ
+    while True:
+      if self.params.get_bool("IsOffroad"):
+        await self.broadcast(status_message(streaming=False, offroad=True))
+        await asyncio.sleep(1.0)
+      else:
+        snapshot = await asyncio.to_thread(self.aggregator.update)
+        await self.broadcast(telemetry_message(snapshot))
+        await asyncio.sleep(interval)
+
+  async def process_request(self, connection: websockets.ServerConnection, request: websockets.Request):
+    route = urlparse(request.path).path
+
+    if not self._check_token(request.path):
+      return connection.respond(401, "Unauthorized")
+
+    if route == "/ws":
+      return None
 
     if route == "/api/snapshot":
-      with self.state.lock:
-        snapshot = self.state.snapshot
-      self._send_json(200, snapshot)
-      return
-
-    if route == "/api/events":
-      self.send_response(200)
-      self.send_header("Content-Type", "text/event-stream")
-      self.send_header("Cache-Control", "no-cache")
-      self.send_header("Connection", "keep-alive")
-      self.end_headers()
-
-      event, snapshot = self.state.register_sse()
-      try:
-        self.wfile.write(f"data: {json.dumps(telemetry_message(snapshot))}\n\n".encode())
-        self.wfile.flush()
-        while True:
-          if not event.wait(timeout=15.0):
-            self.wfile.write(b": keepalive\n\n")
-            self.wfile.flush()
-            continue
-          event.clear()
-          with self.state.lock:
-            payload = telemetry_message(self.state.snapshot)
-          self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
-          self.wfile.flush()
-      except (BrokenPipeError, ConnectionResetError):
-        pass
-      finally:
-        self.state.unregister_sse(event)
-      return
+      if self.params.get_bool("IsOffroad"):
+        body = json.dumps(self.aggregator.idle_snapshot()).encode()
+      else:
+        body = json.dumps(self.aggregator.snapshot()).encode()
+      return Response(200, "OK", [("Content-Type", "application/json")], body)
 
     file_path = self._static_path(route)
     if file_path is None:
-      self._send_bytes(404, b"Not Found\n", "text/plain")
-      return
+      return connection.respond(404, "Not Found")
 
     content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
-    self._send_bytes(200, file_path.read_bytes(), content_type)
+    return Response(200, "OK", [("Content-Type", content_type)], file_path.read_bytes())
 
-  def do_POST(self) -> None:
-    route = urlparse(self.path).path
-    if route != "/api/command":
-      self._send_bytes(404, b"Not Found\n", "text/plain")
+  async def ws_handler(self, websocket: websockets.ServerConnection) -> None:
+    path = websocket.request.path if websocket.request else ""
+    if urlparse(path).path != "/ws":
+      await websocket.close(1008, "invalid path")
+      return
+    if not self._check_token(path):
+      await websocket.close(1008, "unauthorized")
       return
 
-    if not self.state.check_token(self.path):
-      self._send_bytes(401, b"Unauthorized\n", "text/plain")
-      return
+    async with self.lock:
+      self.clients.add(websocket)
+      await websocket.send(json.dumps(self.last_message))
+    self.logger.info("client connected (%d total)", len(self.clients))
 
-    length = int(self.headers.get("Content-Length", 0))
     try:
-      message = json.loads(self.rfile.read(length))
-    except json.JSONDecodeError:
-      self._send_json(400, error_message(None, "INVALID", "invalid JSON"))
-      return
+      async for raw in websocket:
+        try:
+          message = json.loads(raw)
+        except json.JSONDecodeError:
+          await websocket.send(json.dumps(error_message(None, "INVALID", "invalid JSON")))
+          continue
+        response = handle_command(message)
+        await websocket.send(json.dumps(response))
+    except websockets.ConnectionClosed:
+      pass
+    finally:
+      async with self.lock:
+        self.clients.discard(websocket)
+      self.logger.info("client disconnected (%d total)", len(self.clients))
 
-    self._send_json(200, handle_command(message))
-
-
-class TelemetryHTTPServer(ThreadingHTTPServer):
-  daemon_threads = True
-  allow_reuse_address = True
-  state: TelemetryState
-
-
-def broadcaster(state: TelemetryState, stop: threading.Event) -> None:
-  interval = 1.0 / BROADCAST_HZ
-  while not stop.wait(interval):
-    state.update_snapshot()
+  async def run(self) -> None:
+    async with serve(
+      self.ws_handler,
+      self.host,
+      self.port,
+      process_request=self.process_request,
+    ):
+      self.logger.info("listening on http://%s:%d", self.host, self.port)
+      await self.broadcaster()
 
 
 def main() -> None:
@@ -176,7 +152,6 @@ def main() -> None:
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-  logger = logging.getLogger("telemetryd")
 
   params = Params()
   if args.port is not None:
@@ -185,26 +160,27 @@ def main() -> None:
     port_str = params.get("TelemetryServerPort")
     port = int(port_str) if port_str else DEFAULT_PORT
 
-  state = TelemetryState()
-  stop = threading.Event()
-  threading.Thread(target=broadcaster, args=(state, stop), name="telemetry-broadcaster", daemon=True).start()
+  server = TelemetryServer(args.host, port)
+  loop = asyncio.new_event_loop()
+  asyncio.set_event_loop(loop)
 
-  server = TelemetryHTTPServer((args.host, port), TelemetryHandler)
-  server.state = state
-  logger.info("listening on http://%s:%d", args.host, port)
+  broadcaster_task = loop.create_task(server.run())
 
   def shutdown_handler(*_args) -> None:
-    stop.set()
-    server.shutdown()
-
-  signal.signal(signal.SIGINT, shutdown_handler)
-  signal.signal(signal.SIGTERM, shutdown_handler)
+    broadcaster_task.cancel()
 
   try:
-    server.serve_forever()
+    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
+    loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
+  except NotImplementedError:
+    pass
+
+  try:
+    loop.run_until_complete(broadcaster_task)
+  except asyncio.CancelledError:
+    pass
   finally:
-    stop.set()
-    server.server_close()
+    loop.close()
 
 
 if __name__ == "__main__":

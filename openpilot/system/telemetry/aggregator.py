@@ -14,12 +14,18 @@ class TelemetryAggregator:
     self.params = Params()
     self.gps_service = get_gps_location_service(self.params)
     self.services = ["carState", "selfdriveState", self.gps_service]
-    self.sm = messaging.SubMaster(self.services)
-    self._snapshot: dict[str, Any] = self._empty_snapshot()
+    self.sm: messaging.SubMaster | None = None
+    self._snapshot: dict[str, Any] = self._empty_snapshot(streaming=False)
 
-  def _empty_snapshot(self) -> dict[str, Any]:
+  def _ensure_submaster(self) -> messaging.SubMaster:
+    if self.sm is None:
+      self.sm = messaging.SubMaster(self.services)
+    return self.sm
+
+  def _empty_snapshot(self, streaming: bool) -> dict[str, Any]:
     return {
       "ts": time.time(),
+      "streaming": streaming,
       "speed": {"mps": 0.0, "kph": 0.0},
       "targetSpeed": {"kph": 0.0},
       "gps": {
@@ -45,13 +51,14 @@ class TelemetryAggregator:
     }
 
   def update(self) -> dict[str, Any]:
-    self.sm.update(0)
+    sm = self._ensure_submaster()
+    sm.update(0)
 
-    snap = self._empty_snapshot()
+    snap = self._empty_snapshot(streaming=True)
     snap["ts"] = time.time()
 
-    if self.sm.valid["carState"]:
-      cs = self.sm["carState"]
+    if sm.valid["carState"]:
+      cs = sm["carState"]
       snap["speed"]["mps"] = float(cs.vEgo)
       snap["speed"]["kph"] = float(cs.vEgo * CV.MS_TO_KPH)
       snap["targetSpeed"]["kph"] = float(cs.vCruise)
@@ -64,13 +71,13 @@ class TelemetryAggregator:
         "rightBlinker": bool(cs.rightBlinker),
       }
 
-    if self.sm.valid["selfdriveState"]:
-      ss = self.sm["selfdriveState"]
+    if sm.valid["selfdriveState"]:
+      ss = sm["selfdriveState"]
       snap["openpilot"]["engaged"] = bool(ss.enabled)
       snap["openpilot"]["active"] = bool(ss.active)
 
-    if self.sm.valid[self.gps_service]:
-      gps = self.sm[self.gps_service]
+    if sm.valid[self.gps_service]:
+      gps = sm[self.gps_service]
       snap["gps"] = {
         "lat": float(gps.latitude) if gps.latitude else None,
         "lon": float(gps.longitude) if gps.longitude else None,
@@ -85,3 +92,6 @@ class TelemetryAggregator:
 
   def snapshot(self) -> dict[str, Any]:
     return self._snapshot
+
+  def idle_snapshot(self) -> dict[str, Any]:
+    return self._empty_snapshot(streaming=False)

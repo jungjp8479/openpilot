@@ -36,9 +36,33 @@ header h1 {
   color: #fff;
 }
 
+.status.waiting {
+  background: #9e6a03;
+  color: #fff;
+}
+
 .status.disconnected {
   background: #da3633;
   color: #fff;
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.banner.hidden {
+  display: none;
+}
+
+.banner.waiting {
+  display: block;
+  background: #3d2e00;
+  color: #f0c14b;
+  border: 1px solid #9e6a03;
 }
 
 .speed-row {

@@ -38,6 +38,7 @@ dependencies = [
   # athena
   "PyJWT[crypto]",
   "websocket_client",
+  "websockets",
 
   # joystickd
   "inputs",
