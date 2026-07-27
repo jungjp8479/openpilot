@@ -81,9 +81,14 @@
     els.sats.textContent = "--";
   }
 
+  function formatTargetSpeed(kph) {
+    const rounded = Math.round(kph);
+    return rounded === 255 ? "--" : String(rounded);
+  }
+
   function updateUI(data) {
     els.speed.textContent = Math.round(data.speed.kph);
-    els.targetSpeed.textContent = Math.round(data.targetSpeed.kph);
+    els.targetSpeed.textContent = formatTargetSpeed(data.targetSpeed.kph);
 
     const engaged = data.openpilot.engaged || data.openpilot.active;
     els.opBadge.textContent = engaged ? "ENGAGED" : "OFF";
@@ -98,7 +103,7 @@
 
     const angle = d.steeringAngleDeg;
     els.steerAngle.textContent = angle.toFixed(1) + "°";
-    const pct = 50 + (Math.max(-STEER_MAX, Math.min(STEER_MAX, angle)) / STEER_MAX) * 50;
+    const pct = 50 - (Math.max(-STEER_MAX, Math.min(STEER_MAX, angle)) / STEER_MAX) * 50;
     els.steerBar.style.left = pct + "%";
 
     const g = data.gps;
