@@ -14,6 +14,7 @@ ensure_python_deps()
 
 import websockets
 from websockets.asyncio.server import serve
+from websockets.datastructures import Headers
 from websockets.http11 import Response
 
 from openpilot.common.params import Params
@@ -99,14 +100,18 @@ class TelemetryServer:
         body = json.dumps(self.aggregator.idle_snapshot()).encode()
       else:
         body = json.dumps(self.aggregator.snapshot()).encode()
-      return Response(200, "OK", [("Content-Type", "application/json")], body)
+      headers = Headers()
+      headers["Content-Type"] = "application/json"
+      return Response(200, "OK", headers, body)
 
     file_path = self._static_path(route)
     if file_path is None:
       return connection.respond(404, "Not Found")
 
     content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
-    return Response(200, "OK", [("Content-Type", content_type)], file_path.read_bytes())
+    headers = Headers()
+    headers["Content-Type"] = content_type
+    return Response(200, "OK", headers, file_path.read_bytes())
 
   async def ws_handler(self, websocket: websockets.ServerConnection) -> None:
     path = websocket.request.path if websocket.request else ""
