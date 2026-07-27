@@ -9,7 +9,6 @@
     opBadge: document.getElementById("op-badge"),
     gas: document.getElementById("gas"),
     brake: document.getElementById("brake"),
-    steerOverride: document.getElementById("steer-override"),
     leftBlinker: document.getElementById("left-blinker"),
     rightBlinker: document.getElementById("right-blinker"),
     steerBar: document.getElementById("steer-bar"),
@@ -68,7 +67,6 @@
     els.opBadge.className = "badge off";
     setPill(els.gas, false);
     setPill(els.brake, false);
-    setPill(els.steerOverride, false);
     setPill(els.leftBlinker, false);
     setPill(els.rightBlinker, false);
     els.steerAngle.textContent = "0°";
@@ -97,7 +95,6 @@
     const d = data.driver;
     setPill(els.gas, d.gas);
     setPill(els.brake, d.brake);
-    setPill(els.steerOverride, d.steeringPressed);
     setPill(els.leftBlinker, d.leftBlinker);
     setPill(els.rightBlinker, d.rightBlinker);
 
@@ -108,7 +105,7 @@
 
     const g = data.gps;
     if (g.hasFix && g.lat != null && g.lon != null) {
-      els.gpsFix.textContent = "Fix acquired";
+      els.gpsFix.textContent = "Fix";
       els.gpsFix.className = "gps-fix has-fix";
       els.lat.textContent = g.lat.toFixed(6);
       els.lon.textContent = g.lon.toFixed(6);
@@ -185,4 +182,17 @@
 
   initMap();
   connect();
+
+  function bindControlButton(btn, name) {
+    btn.addEventListener("click", function () {
+      btn.classList.add("pressed");
+      window.setTimeout(function () {
+        btn.classList.remove("pressed");
+      }, 200);
+      console.log("control placeholder:", name);
+    });
+  }
+
+  bindControlButton(document.getElementById("btn-set-position"), "set_position");
+  bindControlButton(document.getElementById("btn-ready"), "ready");
 })();
