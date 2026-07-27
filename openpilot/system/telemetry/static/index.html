@@ -28,8 +28,9 @@
 
   <section class="control-row">
     <button type="button" id="btn-set-position" class="control-btn">SET POSITION</button>
-    <button type="button" id="btn-ready" class="control-btn">READY</button>
+    <button type="button" id="btn-ready" class="control-btn not-ready">READY</button>
   </section>
+  <div id="ready-hint" class="ready-hint hidden"></div>
 
   <section class="driver-row">
     <span id="op-badge" class="badge off">OFF</span>
@@ -59,6 +60,11 @@
   </section>
 
   <section id="map"></section>
+
+  <div id="countdown-overlay" class="countdown-overlay hidden" aria-live="assertive">
+    <div class="countdown-warning">BRAKING SOON</div>
+    <div id="countdown-value" class="countdown-value">5</div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/app.js"></script>

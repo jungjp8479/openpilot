@@ -1,5 +1,6 @@
 (function () {
   const STEER_MAX = 90;
+  const LOCKED_STATES = new Set(["armed", "countdown", "running"]);
 
   const els = {
     status: document.getElementById("status"),
@@ -18,12 +19,20 @@
     lon: document.getElementById("lon"),
     accuracy: document.getElementById("accuracy"),
     sats: document.getElementById("sats"),
+    btnSetPosition: document.getElementById("btn-set-position"),
+    btnReady: document.getElementById("btn-ready"),
+    readyHint: document.getElementById("ready-hint"),
+    countdownOverlay: document.getElementById("countdown-overlay"),
+    countdownValue: document.getElementById("countdown-value"),
   };
 
   let map = null;
   let marker = null;
+  let triggerMarker = null;
   let ws = null;
   let reconnectTimer = null;
+  let hintTimer = null;
+  let lastTestSequence = null;
 
   function initMap() {
     map = L.map("map", { zoomControl: true }).setView([0, 0], 2);
@@ -37,6 +46,12 @@
       fillColor: "#58a6ff",
       fillOpacity: 0.8,
     }).addTo(map);
+    triggerMarker = L.circleMarker([0, 0], {
+      radius: 10,
+      color: "#f85149",
+      fillColor: "#f85149",
+      fillOpacity: 0.5,
+    });
   }
 
   function setStatus(mode) {
@@ -60,6 +75,80 @@
     el.classList.toggle("active", !!active);
   }
 
+  function showReadyHint(message, flash) {
+    if (!message) {
+      els.readyHint.className = "ready-hint hidden";
+      els.readyHint.textContent = "";
+      return;
+    }
+    els.readyHint.textContent = message;
+    els.readyHint.className = "ready-hint" + (flash ? " flash" : "");
+    if (flash) {
+      if (hintTimer) window.clearTimeout(hintTimer);
+      hintTimer = window.setTimeout(function () {
+        updateReadyHint(lastTestSequence, false);
+      }, 3000);
+    }
+  }
+
+  function updateReadyButton(ts) {
+    const btn = els.btnReady;
+    btn.classList.remove("ready", "not-ready", "started", "locked");
+
+    if (!ts) {
+      btn.textContent = "READY";
+      btn.classList.add("not-ready");
+      return;
+    }
+
+    if (LOCKED_STATES.has(ts.state)) {
+      btn.textContent = "STARTED";
+      btn.classList.add("started", "locked");
+      return;
+    }
+
+    btn.textContent = "READY";
+    if (ts.ready) {
+      btn.classList.add("ready");
+    } else {
+      btn.classList.add("not-ready");
+    }
+  }
+
+  function updateReadyHint(ts, flash) {
+    if (!ts || LOCKED_STATES.has(ts.state)) {
+      showReadyHint(null);
+      return;
+    }
+    if (ts.ready) {
+      showReadyHint(null);
+      return;
+    }
+    showReadyHint(ts.readyMessage || "", flash);
+  }
+
+  function updateCountdownOverlay(ts) {
+    if (!ts || ts.state !== "countdown" || ts.countdownSec == null) {
+      els.countdownOverlay.className = "countdown-overlay hidden";
+      return;
+    }
+    els.countdownOverlay.className = "countdown-overlay";
+    els.countdownValue.textContent = String(ts.countdownSec);
+  }
+
+  function updateTriggerMarker(ts) {
+    if (!ts || !ts.triggerSet || ts.triggerLat == null || ts.triggerLon == null) {
+      if (triggerMarker && map.hasLayer(triggerMarker)) {
+        map.removeLayer(triggerMarker);
+      }
+      return;
+    }
+    triggerMarker.setLatLng([ts.triggerLat, ts.triggerLon]);
+    if (!map.hasLayer(triggerMarker)) {
+      triggerMarker.addTo(map);
+    }
+  }
+
   function clearUI() {
     els.speed.textContent = "--";
     els.targetSpeed.textContent = "--";
@@ -77,6 +166,10 @@
     els.lon.textContent = "--";
     els.accuracy.textContent = "--";
     els.sats.textContent = "--";
+    lastTestSequence = null;
+    updateReadyButton(null);
+    updateReadyHint(null, false);
+    updateCountdownOverlay(null);
   }
 
   function formatTargetSpeed(kph) {
@@ -122,6 +215,12 @@
       els.accuracy.textContent = "--";
       els.sats.textContent = g.satellites || "--";
     }
+
+    lastTestSequence = data.testSequence || null;
+    updateReadyButton(lastTestSequence);
+    updateReadyHint(lastTestSequence, false);
+    updateCountdownOverlay(lastTestSequence);
+    updateTriggerMarker(lastTestSequence);
   }
 
   function handleMessage(msg) {
@@ -135,6 +234,13 @@
         setStatus("waiting");
         clearUI();
       }
+    } else if (msg.type === "ack") {
+      updateReadyButton({ state: "armed", ready: false });
+      els.btnReady.textContent = "STARTED";
+      els.btnReady.className = "control-btn started locked";
+      showReadyHint(null);
+    } else if (msg.type === "error") {
+      showReadyHint(msg.message || "Command failed", true);
     }
   }
 
@@ -145,6 +251,15 @@
     let url = proto + "//" + location.host + "/ws";
     if (token) url += "?token=" + encodeURIComponent(token);
     return url;
+  }
+
+  function sendCommand(name, params) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      showReadyHint("Not connected", true);
+      return;
+    }
+    const id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+    ws.send(JSON.stringify({ type: "command", id: id, name: name, params: params || {} }));
   }
 
   function connect() {
@@ -183,16 +298,23 @@
   initMap();
   connect();
 
-  function bindControlButton(btn, name) {
-    btn.addEventListener("click", function () {
-      btn.classList.add("pressed");
-      window.setTimeout(function () {
-        btn.classList.remove("pressed");
-      }, 200);
-      console.log("control placeholder:", name);
-    });
-  }
+  els.btnSetPosition.addEventListener("click", function () {
+    els.btnSetPosition.classList.add("pressed");
+    window.setTimeout(function () {
+      els.btnSetPosition.classList.remove("pressed");
+    }, 200);
+    sendCommand("set_position");
+  });
 
-  bindControlButton(document.getElementById("btn-set-position"), "set_position");
-  bindControlButton(document.getElementById("btn-ready"), "ready");
+  els.btnReady.addEventListener("click", function () {
+    if (LOCKED_STATES.has(lastTestSequence && lastTestSequence.state)) {
+      return;
+    }
+    if (lastTestSequence && lastTestSequence.ready) {
+      sendCommand("ready");
+      return;
+    }
+    const msg = (lastTestSequence && lastTestSequence.readyMessage) || "Not ready";
+    showReadyHint(msg, true);
+  });
 })();

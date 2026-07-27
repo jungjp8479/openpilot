@@ -6,6 +6,7 @@ import logging
 import mimetypes
 import signal
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from openpilot.system.telemetry.deps import ensure_python_deps
@@ -61,6 +62,11 @@ class TelemetryServer:
     if not str(file_path).startswith(str(static_root)):
       return None
     return file_path if file_path.is_file() else None
+
+  def _command_snapshot(self) -> dict[str, Any]:
+    if self.params.get_bool("IsOffroad"):
+      return self.aggregator.idle_snapshot()
+    return self.aggregator.snapshot()
 
   async def broadcast(self, message: dict) -> None:
     payload = json.dumps(message)
@@ -134,7 +140,11 @@ class TelemetryServer:
         except json.JSONDecodeError:
           await websocket.send(json.dumps(error_message(None, "INVALID", "invalid JSON")))
           continue
-        response = handle_command(message)
+        response = handle_command(
+          message,
+          params=self.params,
+          get_snapshot=self._command_snapshot,
+        )
         await websocket.send(json.dumps(response))
     except websockets.ConnectionClosed:
       pass

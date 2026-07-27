@@ -133,4 +133,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TelemetryServerEnabled", {PERSISTENT, BOOL}},
     {"TelemetryServerPort", {PERSISTENT, INT, "8080"}},
     {"TelemetryToken", {PERSISTENT, STRING}},
+    {"TestSequenceTriggerLat", {PERSISTENT, FLOAT, "0.0"}},
+    {"TestSequenceTriggerLon", {PERSISTENT, FLOAT, "0.0"}},
+    {"TestSequenceArmed", {PERSISTENT, BOOL}},
+    {"TestSequenceActive", {PERSISTENT, BOOL}},
+    {"TestSequenceState", {PERSISTENT, STRING, "idle"}},
+    {"TestSequenceCountdownSec", {PERSISTENT, INT, "-1"}},
 };

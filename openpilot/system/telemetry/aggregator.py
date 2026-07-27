@@ -7,6 +7,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from openpilot.cereal import messaging
 from openpilot.common.gps import get_gps_location_service
 from openpilot.common.params import Params
+from openpilot.system.test_sequence.readiness import build_test_sequence_status
 
 
 class TelemetryAggregator:
@@ -48,6 +49,17 @@ class TelemetryAggregator:
         "engaged": False,
         "active": False,
       },
+      "testSequence": {
+        "state": "idle",
+        "triggerSet": False,
+        "triggerLat": None,
+        "triggerLon": None,
+        "armed": False,
+        "ready": False,
+        "readyMessage": "Engage openpilot to get ready",
+        "distanceM": None,
+        "countdownSec": None,
+      },
     }
 
   def update(self) -> dict[str, Any]:
@@ -87,6 +99,16 @@ class TelemetryAggregator:
         "bearingDeg": float(gps.bearingDeg) if gps.bearingDeg else None,
       }
 
+    snap["testSequence"] = build_test_sequence_status(
+      self.params,
+      engaged=bool(snap["openpilot"]["engaged"]),
+      active=bool(snap["openpilot"]["active"]),
+      speed_kph=float(snap["speed"]["kph"]),
+      gps_lat=snap["gps"]["lat"],
+      gps_lon=snap["gps"]["lon"],
+      gps_has_fix=bool(snap["gps"]["hasFix"]),
+    )
+
     self._snapshot = snap
     return snap
 
@@ -94,4 +116,14 @@ class TelemetryAggregator:
     return self._snapshot
 
   def idle_snapshot(self) -> dict[str, Any]:
-    return self._empty_snapshot(streaming=False)
+    snap = self._empty_snapshot(streaming=False)
+    snap["testSequence"] = build_test_sequence_status(
+      self.params,
+      engaged=False,
+      active=False,
+      speed_kph=0.0,
+      gps_lat=None,
+      gps_lon=None,
+      gps_has_fix=False,
+    )
+    return snap

@@ -137,6 +137,73 @@ header {
   color: #fff;
 }
 
+.control-btn.ready {
+  background: #238636;
+  border-color: #238636;
+  color: #fff;
+}
+
+.control-btn.not-ready {
+  background: #3d2e00;
+  border-color: #9e6a03;
+  color: #f0c14b;
+}
+
+.control-btn.started {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+.control-btn.locked {
+  pointer-events: none;
+  opacity: 0.95;
+}
+
+.ready-hint {
+  margin: -6px 0 12px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #8b949e;
+  min-height: 1.1rem;
+}
+
+.ready-hint.flash {
+  color: #f85149;
+  font-weight: 600;
+}
+
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(13, 17, 23, 0.92);
+}
+
+.countdown-overlay.hidden {
+  display: none;
+}
+
+.countdown-warning {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #f85149;
+  text-transform: uppercase;
+}
+
+.countdown-value {
+  font-size: 9rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #f0c14b;
+}
+
 .driver-row {
   display: flex;
   align-items: stretch;

@@ -44,7 +44,10 @@ def lat_maneuver(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("LateralManeuverMode")
 
 def not_long_maneuver(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and not params.get_bool("LongitudinalManeuverMode")
+  return started and not params.get_bool("LongitudinalManeuverMode") and not params.get_bool("TestSequenceActive")
+
+def test_sequence(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started
 
 def qcomgps(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and not ublox_available()
@@ -126,6 +129,7 @@ procs = [
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(and_(livestream, not_(iscar)), notcar)),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
   PythonProcess("telemetryd", "openpilot.system.telemetry.telemetryd", telemetry_enabled),
+  PythonProcess("testsequenced", "openpilot.system.test_sequence.testsequenced", test_sequence),
 ]
 
 managed_processes = {p.name: p for p in procs}
