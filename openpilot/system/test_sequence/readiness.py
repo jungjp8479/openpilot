@@ -11,7 +11,7 @@ from openpilot.system.test_sequence.config import (
 
 MSG_ENGAGE = "Engage openpilot to get ready"
 MSG_POSITION = "Set trigger position first"
-MSG_SPEED = "Set cruise to 100 km/h to get ready"
+MSG_SPEED = "Set cruise to 70 km/h to get ready"
 MSG_ALREADY_STARTED = "Test already started"
 
 
