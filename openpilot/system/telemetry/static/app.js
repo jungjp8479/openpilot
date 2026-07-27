@@ -33,6 +33,48 @@
   let reconnectTimer = null;
   let hintTimer = null;
   let lastTestSequence = null;
+  let wakeLock = null;
+  let wakeLockWanted = false;
+
+  async function acquireWakeLock() {
+    if (!("wakeLock" in navigator)) {
+      return;
+    }
+    wakeLockWanted = true;
+    if (wakeLock || document.visibilityState !== "visible") {
+      return;
+    }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", function () {
+        wakeLock = null;
+        if (wakeLockWanted && document.visibilityState === "visible") {
+          acquireWakeLock();
+        }
+      });
+    } catch (e) {
+      console.warn("wake lock unavailable", e);
+    }
+  }
+
+  async function releaseWakeLock() {
+    wakeLockWanted = false;
+    if (!wakeLock) {
+      return;
+    }
+    try {
+      await wakeLock.release();
+    } catch (e) {
+      console.warn("wake lock release failed", e);
+    }
+    wakeLock = null;
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && wakeLockWanted) {
+      acquireWakeLock();
+    }
+  });
 
   function initMap() {
     map = L.map("map", { zoomControl: true }).setView([0, 0], 2);
@@ -275,6 +317,7 @@
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      acquireWakeLock();
     };
 
     ws.onmessage = function (event) {
@@ -287,6 +330,7 @@
 
     ws.onclose = function () {
       setStatus("disconnected");
+      releaseWakeLock();
       reconnectTimer = setTimeout(connect, 2000);
     };
 
