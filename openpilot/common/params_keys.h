@@ -130,4 +130,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UsbGpuPresent", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"UsbGpuCompiled", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"Version", {PERSISTENT, STRING}},
+    {"TelemetryServerEnabled", {PERSISTENT, BOOL}},
+    {"TelemetryServerPort", {PERSISTENT, INT, "8080"}},
+    {"TelemetryToken", {PERSISTENT, STRING}},
 };

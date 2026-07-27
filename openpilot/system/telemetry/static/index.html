@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>openpilot Telemetry</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>openpilot</h1>
+    <div id="status" class="status disconnected">Connecting…</div>
+  </header>
+
+  <section class="speed-row">
+    <div class="speed-card">
+      <div class="label">Speed</div>
+      <div class="value"><span id="speed">--</span> <span class="unit">km/h</span></div>
+    </div>
+    <div class="speed-card">
+      <div class="label">Target</div>
+      <div class="value"><span id="target-speed">--</span> <span class="unit">km/h</span></div>
+    </div>
+  </section>
+
+  <section class="op-state">
+    <span id="op-badge" class="badge off">OFF</span>
+  </section>
+
+  <section class="driver-row">
+    <div id="gas" class="pill">GAS</div>
+    <div id="brake" class="pill">BRAKE</div>
+    <div id="steer-override" class="pill">STEER</div>
+    <div id="left-blinker" class="pill blinker">◀</div>
+    <div id="right-blinker" class="pill blinker">▶</div>
+  </section>
+
+  <section class="steering">
+    <div class="label">Steering</div>
+    <div class="steer-bar-wrap">
+      <div id="steer-bar" class="steer-bar"></div>
+    </div>
+    <div id="steer-angle" class="steer-angle">0°</div>
+  </section>
+
+  <section class="gps-info">
+    <div class="label">GPS</div>
+    <div id="gps-fix" class="gps-fix">No fix</div>
+    <div class="gps-coords">
+      <span id="lat">--</span>, <span id="lon">--</span>
+    </div>
+    <div class="gps-meta">
+      Accuracy: <span id="accuracy">--</span> m · Sats: <span id="sats">--</span>
+    </div>
+  </section>
+
+  <section id="map"></section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

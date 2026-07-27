@@ -61,6 +61,9 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("IsLiveStreaming")
 
+def telemetry_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("TelemetryServerEnabled")
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -122,6 +125,7 @@ procs = [
   NativeProcess("bridge", "openpilot/cereal/messaging", ["./bridge"], notcar),
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(and_(livestream, not_(iscar)), notcar)),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
+  PythonProcess("telemetryd", "openpilot.system.telemetry.telemetryd", and_(only_onroad, telemetry_enabled)),
 ]
 
 managed_processes = {p.name: p for p in procs}
