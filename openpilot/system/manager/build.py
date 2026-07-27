@@ -7,6 +7,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.spinner import Spinner
 from openpilot.common.text_window import TextWindow
 from openpilot.common.hardware import HARDWARE, AGNOS
+from openpilot.system.telemetry.deps import install_python_deps
 
 def build() -> None:
   spinner = Spinner()
@@ -60,6 +61,8 @@ def build() -> None:
       with TextWindow("openpilot failed to build\n \n" + error_s) as t:
         t.wait_for_exit()
     exit(1)
+
+  install_python_deps()
 
 if __name__ == "__main__":
   build()

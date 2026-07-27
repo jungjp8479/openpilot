@@ -8,6 +8,10 @@ import signal
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from openpilot.system.telemetry.deps import ensure_python_deps
+
+ensure_python_deps()
+
 import websockets
 from websockets.asyncio.server import serve
 from websockets.http11 import Response
